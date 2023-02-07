@@ -1,0 +1,382 @@
+1. 3 node
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tf [open out.tr w]
+$ns trace-all $tf
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+
+$n0 label "TCP Source"
+$n2 label "Sink"
+$ns color 1 blue
+
+
+$ns duplex-link $n0 $n1 1Mb 10ms DropTail
+$ns duplex-link $n1 $n2 1Mb 10ms DropTail
+
+$ns queue-limit $n0 $n1 2
+$ns queue-limit $n1 $n2 10
+
+set tcp [new Agent/TCP]
+$ns attach-agent $n0 $tcp
+set sink [new Agent/TCPSink]
+$ns attach-agent $n2 $sink
+$ns connect $tcp $sink
+set cbr [new Application/Traffic/CBR]
+$cbr attach-agent $tcp
+proc finish {} {
+global ns nf tf
+$ns flush-trace
+close $nf
+close $tf
+exec nam out.nam &
+exec echo "no of packets dropped are: " &
+exec grep -c "^d" out.tr &
+exit 0
+}
+$ns at 0.1 "$cbr start"
+$ns at 1.0 "$cbr stop"
+$ns at 1.5 "finish"
+$ns run
+
+
+
+
+2. xgraph
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tf [open out.tr w]
+$ns trace-all $tf
+set ng1 [open tcp1.xg w]
+set ng2 [open tcp2.xg w]
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+$ns make-lan "$n0 $n1 $n2" 1Mb 10ms LL Queue/DropTail Mac/802_3
+$ns make-lan "$n3 $n4 $n5" 2Mb 10ms LL Queue/DropTail Mac/802_3
+$ns duplex-link $n0 $n3 1Mb 10ms DropTail
+set tcp1 [new Agent/TCP]
+$ns attach-agent $n4 $tcp1
+set tcp2 [new Agent/TCP]
+$ns attach-agent $n1 $tcp2
+set sink1 [new Agent/TCPSink]
+$ns attach-agent $n2 $sink1
+$ns connect $tcp1 $sink1
+set sink2 [new Agent/TCPSink]
+$ns attach-agent $n5 $sink2
+$ns connect $tcp2 $sink2
+set cbr1 [new Application/Traffic/CBR]
+$cbr1 attach-agent $tcp1
+set cbr2 [new Application/Traffic/CBR]
+$cbr2 attach-agent $tcp2
+$tcp1 set class_ 1
+$tcp2 set class_ 2
+
+proc End {} {
+global ns nf tf
+$ns flush-trace
+close $nf
+close $tf
+exec nam out.nam &
+exec xgraph tcp1.xg tcp2.xg &
+exit 0
+}
+proc Draw {Agent File} {
+global ns
+set Cong [$Agent set cwnd_]
+set Time [$ns now]
+puts $file "$Time $Cong"
+$ns at [expr $Time+0.01] "Draw $Agent $File"
+}
+$ns at 0.0 "$cbr1 start"
+$ns at 0.7 "$cbr2 start"
+$ns at 0.0 "Draw $tcp1 $ng1"
+$ns at 0.0 "Draw $tcp2 $ng2"
+$ns at 10.0 "End"
+$ns run
+
+
+
+3. Ping
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tf [open out.tr w]
+$ns trace-all $tf
+
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+$ns duplex-link $n0 $n1 0.1Mb 10ms DropTail
+$ns duplex-link $n1 $n2 0.1Mb 10ms DropTail
+$ns duplex-link $n2 $n3 0.1Mb 10ms DropTail
+$ns duplex-link $n3 $n4 0.1Mb 10ms DropTail
+$ns duplex-link $n4 $n5 0.1Mb 10ms DropTail
+proc Finish {} {
+global ns nf tf
+$ns flush-trace
+close $nf
+close $tf
+exec nam out.nam &
+exec echo "The no. of ping packets dropped are: " &
+exec grep -c "^d" out.tr &
+exit 0
+}
+
+Agent/Ping instproc recv {from rtt} {
+$self instvar node_
+puts "node [$node_ id] received ping from $from with round trip time of $rtt ms"
+}
+set p0 [new Agent/Ping]
+$ns attach-agent $n0 $p0
+set p1 [new Agent/Ping]
+$ns attach-agent $n5 $p1
+$ns connect $p0 $p1
+$ns queue-limit $n2 $n3 2
+$ns duplex-link-op $n2 $n3 queuePos 0.5
+set tcp0 [new Agent/TCP]
+$ns attach-agent $n2 $tcp0
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $n4 $sink0
+$ns connect $tcp0 $sink0
+set cbr0 [new Application/Traffic/CBR]
+$cbr0 attach-agent $tcp0
+$ns at 0.2 "$p0 send"
+$ns at 0.4 "$p1 send"
+$ns at 0.4 "$cbr0 start"
+$ns at 0.6 "$p0 send"
+$ns at 0.8 "$p1 send"
+$ns at 1.0 "$cbr0 stop"
+$ns at 1.2 "$p0 send"
+$ns at 1.4 "$p1 send"
+$ns at 1.6 "Finish"
+$ns run
+
+
+4. Ring
+
+set ns [new Simulator]
+$ns color 1 Blue
+$ns color 2 Red
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tf [open out.tr w]
+$ns trace-all $tf
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+$n0 label "TCP Source"
+$n3 label "Sink"
+$ns duplex-link $n0 $n1 10Mb 10ms DropTail
+$ns duplex-link $n1 $n2 10Mb 10ms DropTail
+$ns duplex-link $n2 $n3 10Mb 10ms DropTail
+$ns duplex-link $n3 $n4 10Mb 10ms DropTail
+$ns duplex-link $n4 $n5 10Mb 10ms DropTail
+$ns duplex-link $n5 $n0 10Mb 10ms DropTail
+set tcp [new Agent/TCP]
+$ns attach-agent $n0 $tcp
+set sink [new Agent/TCPSink]
+$ns attach-agent $n3 $sink
+$ns connect $tcp $sink
+set cbr [new Application/Traffic/CBR]
+$cbr attach-agent $tcp
+proc finish {} {
+global ns nf tf
+$ns flush-trace
+close $nf
+close $tf
+exec nam out.nam
+exit 0
+}
+$ns at 0.01 "$cbr start"
+$ns at 1.5  "$cbr stop"
+$ns at 2.0 "finish"
+$ns run
+
+
+5. Star
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+$n1 label "TCP"
+$n3 label "TCPSink"
+$ns duplex-link $n0 $n1 10MB 10ms DropTail
+$ns duplex-link $n0 $n2 10MB 10ms DropTail
+$ns duplex-link $n0 $n3 10MB 10ms DropTail
+$ns duplex-link $n0 $n4 10MB 10ms DropTail
+$ns duplex-link $n0 $n5 10MB 10ms DropTail
+set tcp0 [new Agent/TCP]
+$ns attach-agent $n1 $tcp0
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $n3 $sink0
+$ns connect $tcp0 $sink0
+
+
+set cbr0 [new Application/Traffic/CBR]
+$cbr0 attach-agent $tcp0
+
+
+proc finish {} {
+global ns nf
+$ns flush-trace
+close $nf
+exec nam out.nam
+exit 0
+}
+
+$ns at 0.1 "$cbr0 start"
+$ns at 1.5 "$cbr0 stop"
+$ns at 2 "finish"
+$ns run
+
+6.Bus
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+
+set lan0 [$ns newLan "$n0 $n1 $n2 $n3 $n4 $n5" 0.5MB 40ms LLQueue/DropTail/MAC/Csma/Cd channel]
+set tcp0 [new Agent/TCP]
+$ns attach-agent $n1 $tcp0
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $n3 $sink0
+$ns connect $tcp0 $sink0
+set cbr0 [new Application/Traffic/CBR]
+$cbr0 attach-agent $tcp0
+
+proc finish {} {
+global ns nf
+$ns flush-trace
+close $nf
+exec nam out.nam
+exit 0
+}
+$ns at 0.5 "$cbr0 start"
+$ns at 4.5 "$cbr0 stop"
+$ns at 5.0 "finish"
+$ns run
+
+
+7. Go Back N
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tr [open out.tr w]
+$ns trace-all $tr
+
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+
+$ns duplex-link $n0 $n2 1MB 10ms DropTail
+$ns duplex-link $n1 $n2 1MB 20ms DropTail
+$ns duplex-link $n2 $n3 1MB 20ms DropTail
+$ns duplex-link $n3 $n4 1MB 20ms DropTail
+$ns duplex-link $n3 $n5 1MB 20ms DropTail
+
+
+$ns queue-limit $n1 $n2 5
+
+Agent/TCP set_nam_tracevar_true
+
+set tcp0 [new Agent/TCP]
+$ns attach-agent $n1 $tcp0
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $n4 $sink0
+$ns connect $tcp0 $sink0
+set cbr0 [new Application/Traffic/CBR]
+$cbr0 attach-agent $tcp0
+proc finish {} {
+global ns nf tr
+$ns flush-trace
+close $nf
+close $tr
+puts "Go Back n ..."
+exec nam out.nam
+exit o
+}
+$ns at 0.05 "$cbr0 start"
+$ns at 1.0 "$cbr0 stop"
+$ns at 1.5 "finish"
+$ns run
+
+
+8. Stop and Wait
+
+set ns [new Simulator]
+set nf [open out.nam w]
+$ns namtrace-all $nf
+set tf [open out.tr w]
+$ns trace-all $tf
+
+set n0 [$ns node]
+set n1 [$ns node]
+
+$n0 label "Sender"
+$n1 label "Receiver"
+$ns duplex-link $n0 $n1 1MB 100ms DropTail
+$ns queue-limit $n0 $n1 10
+
+set tcp0 [new Agent/TCP]
+#$tcp0 set window_ 1
+#$tcp0 set maxcwnd_ 1
+$ns attach-agent $n0 $tcp0
+
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $n1 $sink0
+$ns connect $tcp0 $sink0
+
+set cbr0 [new Application/Traffic/CBR]
+$cbr0 attach-agent $tcp0
+
+$ns add-agent-trace $tcp0 tcp
+$ns monitor-agent-trace $tcp0
+
+proc finish {} {
+global ns nf tf
+$ns flush-trace
+close $nf
+close $tf
+puts "Stop and Wait ..."
+exec nam out.nam
+exit 0
+}
+
+$ns at 0.1 "$cbr0 start"
+$ns at 1.0 "$cbr0 stop"
+$ns at 3 "finish"
+$ns run
